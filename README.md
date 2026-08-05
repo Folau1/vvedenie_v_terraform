@@ -150,3 +150,74 @@ Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
 Ключ: result
 Значение: JcIakflD72ZSnWQU
 ```
+### 4 Расскоментировал блок с 22 - 37 (именно тут было закомментировано) и выполнив terraform validate возникает ошибка:
+
+<img width="751" height="356" alt="image" src="https://github.com/user-attachments/assets/01568208-f19b-45f2-b0ea-be42ef61e16a" />
+
+Исходя из ошибки, можно сделать два вывода:
+  У docker_image отсутствует локальное имя.
+  Имя 1nginx начинается с цифры и поэтому недопустимо.
+Исправляем. Добавляем локальное имя: "docker_image" "nginx"
+И меняем название: "docker_container" "nginx"
+Пробуем заново terraform validate:
+<img width="760" height="192" alt="image" src="https://github.com/user-attachments/assets/8f5a992e-6609-478f-a9eb-3eff85ac22bd" />
+Видим опять ошибку, специально она заложена для задания.
+если посмотреть на 30-ую строчку можно заметить слово FAKE которой точно не должно быть. Также неверное имя атрибута 'resulT' вместо 'result'
+Исправляем и пробуем заново:
+<img width="601" height="79" alt="image" src="https://github.com/user-attachments/assets/068ca6bd-edc7-41f9-94ae-f8923405ca81" />
+Всё хорошо запустилось!
+
+Каждый блок должен содержать тип ресурса и его локальное имя!
+
+### 5 Запускам код, показываем выводы.
+
+Вводим в терминале 3 команды: 
+```
+terraform fmt
+terraform validate
+terraform plan
+```
+Проверяем, чтобы все хорошо было и запускаем:
+```
+terraform apply
+```
+Исправленный фрагмент кода:
+
+<img width="703" height="344" alt="image" src="https://github.com/user-attachments/assets/27076c00-f634-4ebf-ba2b-4877ca602b53" />
+
+И сам вывод docker ps:
+
+<img width="808" height="357" alt="image" src="https://github.com/user-attachments/assets/67224da0-3084-4dd8-9475-e80a303d150f" />
+
+### 6 Заменяем имя docker-контейнера в блоке кода.
+
+Ключ -auto-approve автоматически подтверждает выполнение изменений и убирает запрос на ввод 'yes'.
+Опасность заключается в том, что Terraform сразу применит запланированные изменения. Если в конфигурации допущена ошибка, он может без дополнительного подтверждения изменить или удалить важные ресурсы.
+Этот ключ полезен при автоматическом запуске Terraform в скриптах и CI/CD, где нет человеческой руки, который мог бы вручную подтвердить выполнение команды.
+
+Вывод команды docker ps:
+
+<img width="802" height="448" alt="image" src="https://github.com/user-attachments/assets/c8678063-c8e3-4947-8c5d-a9689937f8c9" />
+
+### 7 уничтожение созданных ресурсов с помощью Terraform.
+Уничтожаем командой terraform destroy  и жмём yes чтобы подвердить.
+Проверяем через terraform state list, docker ps, docker ps -a что всё удалено.
+```
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> terraform state list
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> docker ps -a
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+```
+Содержимое файла tfstate:
+
+<img width="545" height="242" alt="image" src="https://github.com/user-attachments/assets/732dcf09-6226-436b-a38a-472c85d5fece" />
+
+### 8
+Образ nginx:latest не был удалён потому, что у нас в main.tf находится строчка: keep_locally = true, которая запрещает удалять образ и он остается локально.
+Из-за этого при выполнении terraform destroy он удалил контейнер и убрал ресурс образа из своего state-файла, но сам образ остался в локальном хранилище Docker.
+
+Проверка того, что образ действительно не удалён командой destroy:
+
+<img width="784" height="111" alt="image" src="https://github.com/user-attachments/assets/90a0addc-c635-465f-9ff8-0c5b4f64fe20" />
+
