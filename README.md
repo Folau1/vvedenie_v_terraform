@@ -3,9 +3,11 @@
 ## Подготовка к выполнению заданий.
 
 Установлена версия Terraform:
+
 <img width="521" height="69" alt="image" src="https://github.com/user-attachments/assets/73e98d43-87eb-488b-bd92-d49675490a66" />
 
 Скачан git репозиторий:
+
 <img width="756" height="245" alt="image" src="https://github.com/user-attachments/assets/74b4b7c5-cdf6-4595-9485-870badc8823c" />
 
 Установлен docker:
