@@ -223,3 +223,152 @@ CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
 
 <img width="784" height="111" alt="image" src="https://github.com/user-attachments/assets/90a0addc-c635-465f-9ff8-0c5b4f64fe20" />
 
+
+
+## Задача 2*
+
+### 1-2 пункт
+
+Установил полный стек докера, вот компактный вывод:
+
+<img width="677" height="236" alt="image" src="https://github.com/user-attachments/assets/6af16192-f3d9-4ac4-8799-5ae309dadbeb" />
+
+### 3. Исходя из документации [тут](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs) можно увидеть как подключить remote docker contex к нашей рабочей станции.
+В разделе Remote Hosts указано, что провайдер может подключаться к удалённому Docker Host по SSH. 
+На рабочей станции был настроен SSH-профиль 'yc-vm', содержащий
+адрес ВМ, имя пользователя и путь к приватному SSH-ключу.
+
+Для удалённой ВМ был создан Docker context:
+
+```
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> ssh yc-vm "docker ps"
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> docker context create yc-remote --docker "host=ssh://yc-vm" --description "Docker на облачной ВМ"
+yc-remote
+Successfully created context "yc-remote"
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> docker context ls
+NAME              DESCRIPTION                               DOCKER ENDPOINT
+default           Current DOCKER_HOST based configuration   npipe:////./pipe/docker_engine
+desktop-linux *   Docker Desktop                            npipe:////./pipe/dockerDesktopLinuxEngine
+yandex-vm         Яндекс Клауд                              ssh://yandex-vm
+yc-remote         Docker на облачной ВМ                     ssh://yc-vm
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> docker --context yc-remote ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+```
+
+В файле main.tf добавил блок:
+```
+provider "docker" {
+  context = "yc-remote"
+}
+```
+
+### запуск MySQL на удалённой ВМ
+
+Были созданы два отдельных случайных пароля: для пользователя 'root' и для пользователя 'wordpress'.
+
+```
+resource "random_password" "mysql_root_password" {
+  length      = 20
+  special     = false
+  min_upper   = 1
+  min_lower   = 1
+  min_numeric = 1
+}
+
+resource "random_password" "mysql_user_password" {
+  length      = 16
+  special     = false
+  min_upper   = 1
+  min_lower   = 1
+  min_numeric = 1
+}
+```
+
+Образ и контейнер был описан следующим образом:
+
+```
+resource "docker_image" "mysql" {
+  name         = "mysql:8"
+  keep_locally = true
+}
+
+resource "docker_container" "mysql" {
+  name  = "mysql"
+  image = docker_image.mysql.image_id
+
+  env = [
+    "MYSQL_ROOT_PASSWORD=${random_password.mysql_root_password.result}",
+    "MYSQL_DATABASE=wordpress",
+    "MYSQL_USER=wordpress",
+    "MYSQL_PASSWORD=${random_password.mysql_user_password.result}",
+    "MYSQL_ROOT_HOST=%"
+  ]
+
+  ports {
+    internal = 3306
+    external = 3306
+    ip       = "127.0.0.1"
+  }
+}
+```
+Для создания ресурсов используем команду terraform apply.
+
+
+Результат выполнения:
+
+```
+Apply complete! Resources: 4 added, 0 changed, 0 destroyed.
+```
+
+Терраформ сам создал пароли, скачал mysql и запустил контейнер.
+
+Проверка запущенного контейнера:
+
+```
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> docker --context yc-remote ps
+CONTAINER ID   IMAGE          COMMAND                  CREATED          STATUS          PORTS                                 NAMES
+edadc75103f0   b3b90af2a655   "docker-entrypoint.s…"   10 minutes ago   Up 10 minutes   127.0.0.1:3306->3306/tcp, 33060/tcp   mysql
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> 
+```
+
+Контейнер работает, всё выполнено на ВМ локально на ip адресе: 127.0.0.1:3306 
+
+Посмотрев логи, можно увидеть, что была создана база данных 'wordpress', пользователь 'wordpress' и пользователю был предоставлен доступ к этой базе. 
+
+Проверяем что mysql работает:
+
+```
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> docker --context yc-remote exec mysql sh -c 'mysqladmin ping -uroot -p"$MYSQL_ROOT_PASSWORD"'
+mysqladmin: [Warning] Using a password on the command line interface can be insecure.
+mysqld is alive
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> 
+```
+
+Ответ "mysqld is alive" подтверждает что база жива и работает.
+
+Проверяем что база живёт только локально:
+```
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> ssh yc-vm "ss -lnt | grep 3306"              
+LISTEN 0      4096       127.0.0.1:3306      0.0.0.0:*
+```
+
+### 6 Просто через mobaxterm подключился, зашёл внутрь контейнера чтобы посмотреть что в .env записано:
+
+```
+root@compute-vm-2-2-20-hdd-1785994098280:~/docker-test# docker ps
+CONTAINER ID   IMAGE          COMMAND                  CREATED       STATUS       PORTS                                 NAMES
+edadc75103f0   b3b90af2a655   "docker-entrypoint.s…"   2 hours ago   Up 2 hours   127.0.0.1:3306->3306/tcp, 33060/tcp   mysql
+root@compute-vm-2-2-20-hdd-1785994098280:~/docker-test# docker exec -it mysql sh
+sh-5.1# env | grep '^MYSQL_'
+MYSQL_MAJOR=8.4
+MYSQL_ROOT_PASSWORD=8L***********jZ
+MYSQL_PASSWORD=fW***********p
+MYSQL_USER=wordpress
+MYSQL_VERSION=8.4.11-1.el9
+MYSQL_ROOT_HOST=%
+MYSQL_DATABASE=wordpress
+MYSQL_SHELL_VERSION=8.4.10-1.el9
+```
+
+Пароли я скрыл специально звёздочками * 
