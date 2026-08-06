@@ -372,3 +372,138 @@ MYSQL_SHELL_VERSION=8.4.10-1.el9
 ```
 
 Пароли я скрыл специально звёздочками * 
+
+## Задача 3 * 
+
+Установил tofu: 
+
+```
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> tofu -version                                
+OpenTofu v1.12.5  
+on windows_amd64                                                
++ provider registry.terraform.io/hashicorp/random v3.9.0
++ provider registry.terraform.io/kreuzwerker/docker v4.5.0
+```
+
+И вот что показывает:
+
+```
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> tofu apply        
+╷
+│ Error: Inconsistent dependency lock file
+│ 
+│ The following dependency selections recorded in the lock file are inconsistent with the current
+│ configuration:
+│   - provider registry.opentofu.org/hashicorp/random: required by this configuration but no version is selected
+│   - provider registry.opentofu.org/kreuzwerker/docker: required by this configuration but no version is selected
+│ 
+│ To update the locked dependency selections to match a changed configuration, run:
+│   tofu init -upgrade
+
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> tofu init -upgrade
+
+Initializing the backend...
+
+Initializing provider plugins...
+- Finding latest version of hashicorp/random...
+- Finding latest version of kreuzwerker/docker...
+╷
+│ Warning: Dependency lock file entries automatically updated
+│ 
+│ OpenTofu automatically rewrote some entries in your dependency lock file:
+│   - registry.terraform.io/hashicorp/random => registry.opentofu.org/hashicorp/random
+│ 
+│ The version selections were preserved, but the hashes were not because the OpenTofu project's provider
+│ releases are not byte-for-byte identical.
+╵
+
+╷
+│ Error: Failed to resolve provider packages
+│ 
+│ Could not resolve provider kreuzwerker/docker: could not connect to registry.opentofu.org: failed to
+│ request discovery document: 403 Forbidden
+╵
+
+╷
+│ Error: Failed to resolve provider packages
+│ 
+│ Could not resolve provider hashicorp/random: could not connect to registry.opentofu.org: failed to
+│ request discovery document: 403 Forbidden
+╵
+```
+Пишет кучу ошибок. Проанализировав ошибки, то, что короткие адреса провайдеров были автоматически преобразованы в адреса Opentofu.
+Поэтому в main.tf мы явно указываем адреса на Terraform Registry:
+
+```
+terraform {
+  required_providers {
+    docker = {
+      source = "registry.terraform.io/kreuzwerker/docker"
+    }
+
+    random = {
+      source = "registry.terraform.io/hashicorp/random"
+    }
+  }
+
+  required_version = "~>1.12.0"
+}
+```
+
+Также для OpenTofu был создан файл "%APPDATA%\tofu.rc" с настройкой зеркала провайдеров:
+
+```
+provider_installation {
+  network_mirror {
+    url     = "https://terraform-mirror.yandexcloud.net/"
+    include = ["registry.terraform.io/*/*"]
+  }
+
+  direct {
+    exclude = ["registry.terraform.io/*/*"]
+  }
+}
+```
+
+Дальше план такой: удаляем все старые init и то что мы пытались делать с apply, и запускаем всё заново:
+
+
+```
+Remove-Item -Recurse -Force .\.terraform -ErrorAction SilentlyContinue
+Remove-Item -Force .\.terraform.lock.hcl -ErrorAction SilentlyContinue
+tofu init
+```
+
+Инициализация завершилась успешно:
+
+```
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> tofu validate
+Success! The configuration is valid.
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> tofu state list
+docker_container.mysql
+docker_image.mysql
+random_password.mysql_root_password
+random_password.mysql_user_password
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> tofu plan
+random_password.mysql_root_password: Refreshing state... [id=none]
+random_password.mysql_user_password: Refreshing state... [id=none]
+docker_image.mysql: Refreshing state... [id=sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fbmysql:8]
+docker_container.mysql: Refreshing state... [id=edadc75103f0429bb23430aaab64800ea351a51242a80d320e61fa82b7eb0f79]
+
+No changes. Your infrastructure matches the configuration.
+
+OpenTofu has compared your real infrastructure against your configuration and found no differences, so no
+changes are needed.
+PS C:\Users\Александр\Documents\Project3\ter-homeworks\01\src> tofu apply -auto-approve
+random_password.mysql_user_password: Refreshing state... [id=none]
+random_password.mysql_root_password: Refreshing state... [id=none]
+docker_image.mysql: Refreshing state... [id=sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fbmysql:8]
+docker_container.mysql: Refreshing state... [id=edadc75103f0429bb23430aaab64800ea351a51242a80d320e61fa82b7eb0f79]
+
+No changes. Your infrastructure matches the configuration.
+
+OpenTofu has compared your real infrastructure against your configuration and found no differences, so no
+changes are needed.
+
+Apply complete! Resources: 0 added, 0 changed, 0 destroyed.
+```
